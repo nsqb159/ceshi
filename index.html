@@ -1,69 +1,27 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh">
 <head>
+    <link rel="icon" type="image/png" href="icon1.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>动态页面加载器</title>
+    <title>值守店铺共享</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
+        body { 
             font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
             background: #f5f7fa;
             min-height: 100vh;
         }
         #content { min-height: 100vh; }
-        .loading {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            color: #666;
-            background: #f5f7fa;
-        }
-        .loading-spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid #e2e8f0;
-            border-top-color: #4f46e5;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin-bottom: 16px;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
         .error {
             text-align: center;
             padding: 80px 20px;
             color: #dc2626;
-            background: #f5f7fa;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
         }
-        .error h3 { font-size: 1.5rem; margin-bottom: 16px; }
-        .error p { color: #666; margin-bottom: 24px; }
-        .error button {
-            padding: 12px 30px;
-            background: #4f46e5;
-            color: white;
-            border: none;
-            border-radius: 40px;
-            font-weight: 600;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        .error button:hover { background: #6366f1; }
     </style>
 </head>
 <body>
-    <div id="content">
-        <div class="loading">
-            <div class="loading-spinner"></div>
-            <p>加载页面中...</p>
-        </div>
-    </div>
+    <div id="content"></div>
 
     <script type="module">
         import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -72,108 +30,65 @@
         const SUPABASE_URL = 'https://sqhcbwqrpyzglbcclzzj.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxaGNid3FycHl6Z2xiY2NsenpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxODIwMDUsImV4cCI6MjA5MTc1ODAwNX0.1-MdHopPxwfzU9Zu78Ae4FiyMazAPswrA4HwcHJKeP0';
         
-        // 从 URL 获取页面名称，支持 ?page=xxx 或 ?name=xxx
-        const urlParams = new URLSearchParams(window.location.search);
-        const PAGE_NAME = urlParams.get('page') || urlParams.get('name') || '';
+        // 🔥 页面名称
+        const PAGE_NAME = '值守店铺共享';
         // =============================
 
         const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        window.sharedSupabase = supabase;
+
         const contentDiv = document.getElementById('content');
 
         async function loadPage(pageName) {
             if (!pageName) {
-                contentDiv.innerHTML = `
-                    <div class="error">
-                        <h3>❌ 缺少页面名称</h3>
-                        <p>请在 URL 中添加 ?page=页面名称</p>
-                        <p style="font-size:14px;margin-top:10px;color:#999;">例如: ?page=测试1</p>
-                    </div>
-                `;
+                contentDiv.innerHTML = `<div class="error"><h3>❌ 错误</h3><p>未指定页面名称</p></div>`;
                 return;
             }
             
-            // 显示加载状态
-            contentDiv.innerHTML = `
-                <div class="loading">
-                    <div class="loading-spinner"></div>
-                    <p>正在加载 "${pageName}" ...</p>
-                </div>
-            `;
-            
-            // 从数据库读取
             const { data, error } = await supabase
                 .from('page_code')
-                。select('*')
+                .select('*')
                 .eq('page_name', pageName)
                 .single();
 
             if (error) {
-                contentDiv.innerHTML = `
-                    <div class="error">
-                        <h3>❌ 加载失败</h3>
-                        <p>${error.message}</p>
-                        <p style="margin-top:10px;color:#999;">页面 "${pageName}" 不存在或已被删除</p>
-                        <button onclick="location.reload()">重试</button>
-                    </div>
-                `;
+                contentDiv.innerHTML = `<div class="error">
+                    <h3>❌ 加载失败</h3>
+                    <p>${error.message}</p>
+                    <p style="margin-top:20px;font-size:14px;">页面 "${pageName}" 不存在</p>
+                </div>`;
+                document.title = '错误';
                 return;
             }
 
-            // 获取 HTML 内容
-            const htmlContent = data.html_content || '';
-            
-            if (!htmlContent) {
-                contentDiv.innerHTML = `
-                    <div class="error">
-                        <h3>⚠️ 页面内容为空</h3>
-                        <p>页面 "${pageName}" 没有内容</p>
-                        <button onclick="location.reload()">重试</button>
-                    </div>
-                `;
-                return;
-            }
-
-            // 判断是否为完整 HTML
-            if (htmlContent.includes('<!DOCTYPE') || htmlContent.includes('<html')) {
-                // 完整 HTML：替换整个文档
-                document.open();
-                document.write(htmlContent);
-                document.close();
-            } else {
-                // 片段 HTML：渲染到 content 区域
-                contentDiv.innerHTML = htmlContent;
-                
-                // 如果有 CSS 内容，注入
-                if (data.css_content) {
-                    const style = document.createElement('style');
-                    style.textContent = data.css_content;
-                    document.head.appendChild(style);
-                }
-                
-                // 如果有 JS 内容，执行
-                if (data.js_content) {
-                    const script = document.createElement('script');
-                    script.textContent = data.js_content;
-                    document.body.appendChild(script);
-                }
-                
-                // 执行 HTML 中的 script 标签
-                const scripts = contentDiv.querySelectorAll('script');
-                scripts.forEach(oldScript => {
-                    const newScript = document.createElement('script');
-                    Array.from(oldScript.attributes).forEach(attr => {
-                        newScript.setAttribute(attr.name, attr.value);
-                    });
-                    newScript.textContent = oldScript.textContent;
-                    oldScript.replaceWith(newScript);
-                });
-            }
-            
-            // 设置页面标题
             document.title = pageName;
+
+            // 清除旧样式和脚本
+            document.querySelectorAll('style[data-dynamic]').forEach(s => s.remove());
+            document.querySelectorAll('script[data-dynamic]').forEach(s => s.remove());
+
+            // 注入 CSS
+            if (data.css_content) {
+                const style = document.createElement('style');
+                style.setAttribute('data-dynamic', 'true');
+                style.textContent = data.css_content;
+                document.head.appendChild(style);
+            }
+
+            // 注入 HTML
+            contentDiv.innerHTML = data.html_content || '';
+
+            // 执行 JavaScript
+            if (data.js_content) {
+                const script = document.createElement('script');
+                script.setAttribute('data-dynamic', 'true');
+                script.setAttribute('type', 'module');
+                script.textContent = data.js_content;
+                document.body.appendChild(script);
+            }
         }
 
-        // 立即加载
+        // 立即加载页面，不显示加载动画
         loadPage(PAGE_NAME);
     </script>
 </body>
